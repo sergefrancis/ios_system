@@ -2,7 +2,7 @@
 
 
 <p align="center">
-<img src="https://img.shields.io/badge/Platform-iOS%2011.0+-lightgrey.svg" alt="Platform: iOS">
+<img src="https://img.shields.io/badge/Platform-iOS%2010.0+-lightgrey.svg" alt="Platform: iOS">
 <a href="https://travis-ci.org/holzschu/ios_system"><img src="https://travis-ci.org/holzschu/ios_system.svg?branch=master" alt="Build Status"/></a>
 <br>
 <a href="http://twitter.com/nholzschuch"><img src="https://img.shields.io/badge/Twitter-@nholzschuch-blue.svg?style=flat" alt="Twitter"/></a>
@@ -27,7 +27,7 @@ Each command is defined inside a framework. The framework is loaded when the com
 
 Network-based commands (nslookup, dig, host, ping, telnet) are also available as a separate framework, [network_ios](https://github.com/holzschu/network_ios). Place the compiled library with the other libraries and add it to the embedded libraries of your application.
 
-This `ios_system` framework has been successfully ported into two shells, [Blink](https://github.com/holzschu/blink) and [OpenTerm](https://github.com/louisdh/terminal) and into an editor, [iVim](https://github.com/holzschu/iVim). Each time, it provides a Unix look-and-feel (well, mostly feel). 
+This `ios_system` framework has been successfully integrated into four shells, [Blink](https://github.com/blinksh/blink/), [OpenTerm](https://github.com/louisdh/terminal), [Pisth](https://github.com/ColdGrub1384/Pisth) and [LibTerm](https://github.com/ColdGrub1384/LibTerm) as well as an editor, [iVim](https://github.com/holzschu/iVim). Each time, it provides a Unix look-and-feel (well, mostly feel). 
 
 **Issues:** In iOS, you cannot write in the `~` directory, only in `~/Documents/`, `~/Library/` and `~/tmp`. Most Unix programs assume the configuration files are in `$HOME`. 
 So either you redefine `$HOME` to `~/Documents/` or you set configuration variables (using `setenv`) to some other place. This is done in the `initializeEnvironment()` function. 
@@ -121,19 +121,20 @@ To add a command:
 - (Optional) create an issue: https://github.com/holzschu/ios_system/issues That will let others know you're working on it, and possibly join forces with you (that's the beauty of OpenSource). 
 - find the source code for the command, preferrably with BSD license. [Apple OpenSource](https://opensource.apple.com) is a good place to start. Compile it first for OSX, to see if it works, and go through configuration. 
 - make the following changes to the code: 
-    - include `ios_error.h` (it will replace all calls to `exit` by calls to `pthread_exit`)
-    - replace calls to `warn`, `err`, `errx` and `warnx` by calls to `fprintf`, plus `pthread_exit` if needed.
-    - replace all occurences of `stdin`, `stdout`, `stderr` by `thread_stdin`, `thread_stdout`, `thread_stderr` (these are thread-local variables, taking a different value for each thread so we can pipe commands).
-    - replace all calls to `printf`, `write`,... with explicit calls to `fprintf(thread_stdout, ...)` (`ios_error.h` takes care of some of these).
-    - replace `STDIN_FILENO` with `fileno(stdin)`. Replace `STDOUT_FILENO` by calls to `fprintf` or `fwrite`; `fileno(thread_stdout)` does not always exist (it can be a stream with no files associated). Same with `stderr`. 
-    - replace calls to `isatty()` by tests `(stdout == thread_stdout)`. Normally, this is true if we're in the iOS equivalent of a tty. 
+    - change the `main()` function into `command_main()`.
+    - include `ios_error.h`.
+    - link with `ios_system.framework`; this will replace most function calls by `ios_system` version (`exit`, `warn`, `err`, `errx`, `warnx`, `printf`, `write`...)
+    - replace calls to `isatty()` with calls to `ios_isatty()`. 
+    - usually, this is enough for your command to compile, and sometimes to run. Check that it works.
+    - if you have no output: find where the output happens. Within `ios_system`, standard output must go to `thread_stout`. `libc_replacement.c` intercepts most of the output functions, but not all.
+    - if you have issues with input: find where it happens. Standard input comes from `thread_stdin`.
     - make sure you initialize all variables at startup, and release all memory on exit.
     - make all global variables thread-local with `__thread`, make sure local variables are marked with `static`. 
     - make sure your code doesn't use commands that don't work in a sandbox: `fork`, `exec`, `system`, `popen`, `isExecutableFileAtPath`, `access`... (some of these fail at compile time, others fail silently at run time). 
     - compile the digital library, add it to the embedded frameworks of your app. 
     - Edit the `Resources/extraCommandsDictionary.plist` to add your command, and run. 
     - That's it. 
-    - Test a lot. Side effects appear can after several launches.
+    - Test a lot. Side effects can appear after several launches.
     - if your command has a large code base, work out the difference in your edits and make a patch, rather than commit the entire code. See `get_sources_for_patching.sh` for an example. 
 
 **Frequently asked commands:** here is a list of commands that are often requested, and my experience with them:
@@ -148,15 +149,13 @@ To add a command:
 
 ### Licensing:
 
-As much as possible, I used the BSD version of the tools. More precisely:
+`ios_system` itself is released under the  <a href='https://en.wikipedia.org/wiki/BSD_licenses#3-clause_license_("BSD_License_2.0",_"Revised_BSD_License",_"New_BSD_License",_or_"Modified_BSD_License")'>Revised BSD License</a> (3-clause BSD license). Foe the other tools, I've used the BSD version as often as possible: 
 - awk: <a href="https://github.com/onetrueawk/awk/blob/master/LICENSE">OpenSource license</a>.
 - curl, scp, sftp: <a href="https://curl.haxx.se/docs/copyright.html">MIT/X derivate license</a>.
 - lua: <a href="https://www.lua.org/license.html">MIT License</a>.
 - python: <a href="https://docs.python.org/2.7/license.html">Python license</a>.
 - libssh2: <a href='https://en.wikipedia.org/wiki/BSD_licenses#3-clause_license_("BSD_License_2.0",_"Revised_BSD_License",_"New_BSD_License",_or_"Modified_BSD_License")'>Revised BSD License</a> (a.k.a. 3-clause BSD license).
-- egrep, fgrep, grep, gzip, gunzip: <a href='https://en.wikipedia.org/wiki/BSD_licenses#2-clause_license_("Simplified_BSD_License"_or_"FreeBSD_License")'>Simplified BSD License</a> (2-clause BSD license).
-- cat, chflag, compress, cp, date, echo, env, link, ln, printenv, pwd, sed, tar, uncompress, uptime, <a href='https://en.wikipedia.org/wiki/BSD_licenses#3-clause_license_("BSD_License_2.0",_"Revised_BSD_License",_"New_BSD_License",_or_"Modified_BSD_License")'>Revised BSD License</a> (a.k.a. 3-clause BSD license).
-- chgrp, chksum, chmod, chown, df, du, groups, id, ls, mkdir, mv, readlink, rm, rmdir, stat, sum, touch, tr, uname, wc, whoami: <a href='https://en.wikipedia.org/wiki/BSD_licenses#4-clause_license_(original_"BSD_License")'>Original BSD License</a> (4-clause BSD license)
+- egrep, fgrep, grep, gzip, gunzip, cat, chflag, compress, cp, date, echo, env, link, ln, printenv, pwd, ed, sed, tar, uncompress, uptime, chgrp, chksum, chmod, chown, df, du, groups, id, ls, mkdir, mv, readlink, rm, rmdir, stat, sum, touch, tr, uname, wc, whoami: <a href='https://en.wikipedia.org/wiki/BSD_licenses#3-clause_license_("BSD_License_2.0",_"Revised_BSD_License",_"New_BSD_License",_or_"Modified_BSD_License")'>Revised BSD License</a> (a.k.a. 3-clause BSD license).
 - pdftex, luatex and all TeX-based programs: <a href="https://www.gnu.org/licenses/gpl.html">GNU General Public License</a>.
 
 Using BSD versions has consequences on the flags and how they work. For example, there are two versions of `sed`, the BSD version and the GNU version. They have roughly the same behaviour, but differ on `-i` (in place): the GNU version overwrites the file if you don't provide an extension, the BSD version won't work unless you provide the extension to use on the backup file (and will backup the input file with that extension). 
